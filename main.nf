@@ -31,6 +31,8 @@ Mandatory parameters:
 --reference         Path to the reference genome's genbank file, or a pickle dump of the corresponding gumpy Genome
 --catalogue         Path to the resistance catalogue
 --output_dir        Desired output path for all files produced by gnomon
+--fasta             The kind of fasta file to generate. Defaults to fixed length (indels do not change length).
+                    One of `fixed` and `variable`
 """
 .stripIndent()
 }
@@ -46,6 +48,7 @@ Parameters used:
 --reference         ${params.reference}
 --catalogue         ${params.catalogue}
 --output_dir        ${params.output_dir}
+--fasta             ${params.fasta}
 
 Runtime data:
 ------------------------------------------------------------------------
@@ -62,18 +65,28 @@ process runPrediction {
         path reference
         path catalogue
         path outputDir
+        val fasta
     output:
         path "$outputDir/gnomon.log"
         path "$outputDir/variants.csv"
+        path "$outputDir/gnomon-out.json" //Always create the JSON
         path "$outputDir/mutations.csv" optional true
         path "$outputDir/effects.csv" optional true
+        //One of these will always be created. Default is fixed length
+        path "$outputDir/*-fixed.fasta" optional true
+        path "$outputDir/*-variable.fasta" optional true
     script:
+        //This is an admittedly hacky way to try to get it to run inside docker
+        //But should only be used for testing
         """
-        gnomon --genome_object $reference --catalogue $catalogue --vcf_file $sample --output_dir $outputDir --filetype csv
+        apt-get update && apt-get install -y python3-pip git
+        git clone https://github.com/oxfordmmm/gnomon && cd gnomon && pip install .
+        cd ..
+        gnomon --genome_object $reference --catalogue $catalogue --vcf_file $sample --output_dir $outputDir --json --fasta $fasta
         """
 }
 
 workflow {
     main:
-        runPrediction(params.sample, params.reference, params.catalogue, params.output_dir)
+        runPrediction(params.sample, params.reference, params.catalogue, params.output_dir, params.fasta)
 }
